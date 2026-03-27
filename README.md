@@ -50,10 +50,17 @@ GROQ_API_KEY=your_groq_key
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `gunicorn app:app`
    - Plan: Free
-4. Environment Vars: Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, GROQ_API_KEY from .env.
-5. Deploy → URL ready!
+4. **Environment Variables**:
+   - Click "Environment" tab → "Add Environment Variable"
+   - Key: `TWILIO_ACCOUNT_SID`, Value: from your .env
+   - Key: `TWILIO_AUTH_TOKEN`, Value: from .env
+   - Key: `GROQ_API_KEY`, Value: from .env
+5. "Create Web Service" → Deploy!
 
-Update Twilio webhook to Render URL/whatsapp.
+**After Deploy**:
+- Render URL: e.g. `keddy-abc.onrender.com`
+- Update Twilio webhook: `https://keddy-abc.onrender.com/whatsapp` (POST)
+
 
 ## 🛠️ Development
 - Edit `services/groq_api.py` for model/personality

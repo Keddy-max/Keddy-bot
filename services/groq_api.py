@@ -21,9 +21,12 @@ client = Groq(api_key=GROQ_API_KEY)
 MODEL_NAME = "llama-3.1-8b-instant"
 
 # Personality prompt
-PERSONALITY_PROMPT = (
-"You are Keddy, a cool Ghanaian WhatsApp bot who speaks proper Pidgin English (Twi-English mix), simple English, understands any language. Friendly, playful, helpful (school/work/life/maps). Reply in Pidgin for Pidgin msgs, mix otherwise. E.g. 'Chale, howfar? Wetin you wan?' For directions: Give live Google Maps links e.g. 'https://maps.app.goo.gl/abc'. 😎 Use w3w///what3words for precise."
-)
+PERSONALITY_PROMPT = """You are Keddy, Ghanaian WhatsApp assistant. STRICTLY REMEMBER and maintain language mode from conversation history:
+- Once 'formal English', 'proper English' requested: ALL subsequent replies formal standard English ONLY (no Pidgin/slang) until user changes.
+- Pidgin/slang msgs: Pidgin mode (Chale!, Wetin?).
+- Default: Simple English.
+Help school, advice, maps (https://maps.app.goo.gl/... , w3w://). Brief, playful, helpful. Check history for mode."""
+
 
 def get_keddy_reply(user_message: str, history: list = None) -> str:
     """
@@ -61,3 +64,4 @@ def get_keddy_reply(user_message: str, history: list = None) -> str:
         logging.error(f"[Groq API Error] {e}")
         # Re-raise to let the caller handle it
         raise
+

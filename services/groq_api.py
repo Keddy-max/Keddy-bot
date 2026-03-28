@@ -32,7 +32,7 @@ MODE RULES (obey strictly):
 You are Keddy, Ghanaian WhatsApp helper. School, advice, maps (https://maps.app.goo.gl/...). Short, friendly."""
 
 
-def get_keddy_reply(user_message: str, history: list = None) -> str:
+def get_keddy_reply(user_message: str, history: list = None, mode: str = None) -> str:
     """
     Sends the user's message (with optional history) to the Groq API and returns the AI-generated reply.
 
@@ -47,7 +47,10 @@ def get_keddy_reply(user_message: str, history: list = None) -> str:
         Exception: If the API call fails or returns an error.
     """
     # Build messages list: system + history + current user msg
-    messages = [{"role": "system", "content": PERSONALITY_PROMPT}]
+    system_content = PERSONALITY_PROMPT
+    if mode:
+        system_content += f"\\n\\n***LOCKED MODE OVERRIDE***: {mode.upper()} MODE ONLY. Ignore all other triggers, user slang, or history. STRICTLY use {mode.upper()} style for this response regardless of input."
+    messages = [{"role": "system", "content": system_content}]
     if history:
         messages += history
     messages.append({"role": "user", "content": user_message})

@@ -25,9 +25,11 @@ def whatsapp_webhook():
 
     logging.info(f"Incoming message from {phone_number}: {user_message}")
 
-    # Simple in-memory session history per phone (use Redis in prod)
-    session_history = defaultdict(list)
-    history = session_history[phone_number]
+    # Simple in-memory session data per phone (use Redis in prod)
+    session_data = defaultdict(lambda: {"history": [], "mode": "simple"})
+    data = session_data[phone_number]
+    history = data["history"]
+    mode = data["mode"]
 
     # Prepare Twilio response
     twiml_response = MessagingResponse()
@@ -36,16 +38,23 @@ def whatsapp_webhook():
         twiml_response.message("Hi! Send me a message and I'll reply. 😊")
         return Response(str(twiml_response), mimetype="application/xml")
 
+    user_lower = user_message.lower()
+    if any(k in user_lower for k in ["formal english", "proper english", "speak formally", "standard english"]):
+        data["mode"] = "formal"
+    elif any(k in user_lower for k in ["pidgin", "chale mode", "speak pidgin"]):
+        data["mode"] = "pidgin"
+    mode = data["mode"]
+
     try:
-        # Get AI reply with history
-        ai_reply = get_keddy_reply(user_message, history)
+        # Get AI reply with history and mode
+        ai_reply = get_keddy_reply(user_message, history, mode)
         twiml_response.message(ai_reply)
 
         # Update history (keep last 6 exchanges ~12 msgs)
-        history.append({"role": "user", "content": user_message})
-        history.append({"role": "assistant", "content": ai_reply})
-        if len(history) > 12:
-            history[:] = history[-12:]
+        data["history"].append({"role": "user", "content": user_message})
+        data["history"].append({"role": "assistant", "content": ai_reply})
+        if len(data["history"]) > 12:
+            data["history"][:] = data["history"][-12:]
 
         logging.info(f"Replied to {phone_number}")
     except Exception as e:
@@ -55,3 +64,4 @@ def whatsapp_webhook():
 
     # Return Twilio TwiML XML
     return Response(str(twiml_response), mimetype="application/xml")
+

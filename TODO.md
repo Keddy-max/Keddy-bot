@@ -22,10 +22,7 @@
 
 5. [x] **Enhancements** ✅ (limiter, status, history, logging complete)
 
-6. [ ] **Test**
-
-
-4. [ ] **Code Edits**
+6. [x] **Test Setup** ✅\n   - .env created with template (update your GROQ_API_KEY)\n   - TODO updated
    - app.py: Add logging.basicConfig(level=logging.INFO)
    - routes/whatsapp.py: Use helpers.sanitize_input(); Add phone-based session history (dict); Pass history to groq_api
    - services/groq_api.py: Update get_keddy_reply to accept/use history messages list
@@ -39,7 +36,7 @@
    - Use ngrok http 5000
    - Configure Twilio sandbox webhook to ngrok/whatsapp
 
-7. [ ] **Complete** - attempt_completion
+7. [ ] **Run & Deploy**\n   - Terminal 1: python app.py\n   - Terminal 2: ./ngrok/ngrok.exe http 5000 → copy URL\n   - Twilio → WhatsApp Sandbox webhook: https://[URL]/whatsapp (POST)\n   - Test message → fixed!
 
 Progress tracked here. Updates after each step.
 

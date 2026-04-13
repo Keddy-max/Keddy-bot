@@ -19,13 +19,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-limiter = Limiter(
-    key_func=get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50/hour"]
-)
+
 
 # Import routes after app creation to avoid circular imports
 from routes.whatsapp import whatsapp_bp

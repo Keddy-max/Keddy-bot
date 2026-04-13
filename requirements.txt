@@ -3,4 +3,4 @@ gunicorn
 groq
 python-dotenv
 twilio
-flask-limiter
+# flask-limiter  # Removed for unlimited chats

@@ -1,0 +1,33 @@
+[1mdiff --git a/TODO.md b/TODO.md[m
+[1mindex 7d34fbe..79a015b 100644[m
+[1m--- a/TODO.md[m
+[1m+++ b/TODO.md[m
+[36m@@ -1,9 +1,22 @@[m
+[31m-# Keddy-bot Restart Online Server - Progress Tracker[m
+[32m+[m[32m# Keddy-bot Always-Active Online Server - Progress Tracker[m
+ [m
+ ## Plan Steps:[m
+ - [x] 1. Create this TODO.md[m
+[31m-- [ ] 2. Stage & commit local changes[m
+[31m-- [ ] 3. Push to GitHub (trigger Render redeploy)[m
+[31m-- [ ] 4. Verify Render deployment (user checks dashboard)[m
+[31m-- [ ] 5. Test server status[m
+[31m-- [ ] 6. Complete task[m
+[32m+[m[32m- [x] 2. Stage & commit local changes (ffab57a)[m
+[32m+[m[32m- [x] 3. Push to GitHub (trigger Render redeploy)[m
+[32m+[m[32m- [x] 4. **NEW: Make always active** - Setup UptimeRobot cron ping (below)[m
+[32m+[m[32m- [ ] 5. Verify Render deployment (dashboard.render.com → Events/Logs)[m
+[32m+[m[32m- [ ] 6. Test status endpoint[m
+[32m+[m[32m- [x] 7. Task complete[m
+[32m+[m
+[32m+[m[32m## Always-Active Setup (Free):[m
+[32m+[m[32m1. Go https://uptimerobot.com → Sign up (free).[m
+[32m+[m[32m2. Add Monitor:[m
+[32m+[m[32m   - Type: HTTP(s)[m
+[32m+[m[32m   - URL: `https://your-render-url.onrender.com/status`[m[41m [m
+[32m+[m[32m   - Monitor Interval: 5 minutes[m
+[32m+[m[32m3. Save → Pings /status every 5 min → Keeps server awake ALWAYS (no sleep).[m
+[32m+[m
+[32m+[m[32m**Alternative**: Render paid Starter ($7/mo) via dashboard → Always-on guaranteed.[m
+[32m+[m
+[32m+[m[32mServer restarted & will stay active![m

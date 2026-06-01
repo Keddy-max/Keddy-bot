@@ -4,13 +4,21 @@ Flask Blueprint for handling Twilio WhatsApp webhook requests with logging, sani
 
 from flask import Blueprint, request, Response
 from twilio.twiml.messaging_response import MessagingResponse
-from services.groq_api import get_keddy_reply
 import logging
 from collections import defaultdict
+
+from services.groq_api import get_keddy_reply
 from utils.helpers import sanitize_input
+
+# Default locked mode: formal English
+DEFAULT_MODE = "formal"
+
+# Persistent session storage (use Redis in production)
+session_data = {}
 
 # Create a Blueprint for WhatsApp routes
 whatsapp_bp = Blueprint("whatsapp", __name__)
+
 
 @whatsapp_bp.route("/whatsapp", methods=["POST"])
 def whatsapp_webhook():
@@ -25,11 +33,12 @@ def whatsapp_webhook():
 
     logging.info(f"Incoming message from {phone_number}: {user_message}")
 
-    # Simple in-memory session data per phone (use Redis in prod)
-    session_data = defaultdict(lambda: {"history": [], "mode": "simple"})
+    # Initialize or retrieve session data for this phone
+    if phone_number not in session_data:
+        session_data[phone_number] = {"history": [], "mode": DEFAULT_MODE}
+    
     data = session_data[phone_number]
     history = data["history"]
-    mode = data["mode"]
 
     # Prepare Twilio response
     twiml_response = MessagingResponse()
@@ -38,12 +47,39 @@ def whatsapp_webhook():
         twiml_response.message("Hi! Send me a message and I'll reply. 😊")
         return Response(str(twiml_response), mimetype="application/xml")
 
+    # Detect language mode from user message.
+    # Start with current mode, only switch if explicitly triggered
     user_lower = user_message.lower()
-    if any(k in user_lower for k in ["formal english", "proper english", "speak formally", "standard english"]):
-        data["mode"] = "formal"
-    elif any(k in user_lower for k in ["pidgin", "chale mode", "speak pidgin"]):
+
+    formal_triggers = [
+        "formal english",
+        "proper english",
+        "speak formally",
+        "standard english",
+    ]
+    pidgin_triggers = [
+        "pidgin",
+        "chale mode",
+        "speak pidgin",
+        # common pidgin tokens
+        "weyin",
+        "wetin",
+        "chale",
+        "e no",
+        "make we",
+        "abeg",
+    ]
+
+    # Only switch mode if explicit trigger is found
+    if any(k in user_lower for k in pidgin_triggers):
         data["mode"] = "pidgin"
+        logging.info(f"Switched {phone_number} to pidgin mode")
+    elif any(k in user_lower for k in formal_triggers):
+        data["mode"] = "formal"
+        logging.info(f"Switched {phone_number} to formal mode")
+    
     mode = data["mode"]
+    logging.info(f"Using mode: {mode} for {phone_number}")
 
     try:
         # Get AI reply with history and mode

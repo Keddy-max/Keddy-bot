@@ -20,3 +20,10 @@
 **Alternative**: Render paid Starter ($7/mo) via dashboard → Always-on guaranteed.
 
 Server restarted & will stay active!
+
+---
+
+## Language Mode Update
+- [ ] 8. Set default bot mode to **formal** (not pidgin).
+- [ ] 9. Ensure pidgin mode activates only when the user messages indicate pidgin.
+

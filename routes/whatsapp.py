@@ -57,23 +57,22 @@ def whatsapp_webhook():
         "speak formally",
         "standard english",
     ]
-    pidgin_triggers = [
-        "pidgin",
-        "chale mode",
-        "speak pidgin",
-        # common pidgin tokens
-        "weyin",
-        "wetin",
-        "chale",
-        "e no",
-        "make we",
-        "abeg",
+    roadman_triggers = [
+        "roadman",
+        "uk english",
+        "bro talk",
+        "speak roadman",
+        "innit",
+        "fam",
+        "mandem",
+        "blud",
+        "ting",
     ]
 
     # Only switch mode if explicit trigger is found
-    if any(k in user_lower for k in pidgin_triggers):
-        data["mode"] = "pidgin"
-        logging.info(f"Switched {phone_number} to pidgin mode")
+    if any(k in user_lower for k in roadman_triggers):
+        data["mode"] = "roadman"
+        logging.info(f"Switched {phone_number} to roadman mode")
     elif any(k in user_lower for k in formal_triggers):
         data["mode"] = "formal"
         logging.info(f"Switched {phone_number} to formal mode")

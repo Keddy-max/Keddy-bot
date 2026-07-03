@@ -121,7 +121,6 @@ def download_twilio_media(url: str, content_type: str) -> MediaAttachment:
     # transcoding/encoding differences. If Twilio returns exactly-at-limit
     # payloads, allow a small grace via MAX_MEDIA_BYTES buffer above.
 
-
     if not data:
         raise ValueError("Media file is empty")
 

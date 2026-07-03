@@ -193,6 +193,13 @@ def whatsapp_webhook() -> Response:
     """Handle incoming WhatsApp messages including text, voice notes, and images."""
     twiml_response: MessagingResponse = MessagingResponse()
 
+    # NOTE: WhatsApp "typing" indicators are limited; Twilio shows it only
+    # for specific TwiML <Typing> action, which may not be supported in all
+    # WhatsApp integrations. We send a short interim message (and will be
+    # replaced by the real reply below).
+    twiml_response.message("💬")
+
+
     try:
         if not _validate_twilio_request():
             logging.warning("Invalid Twilio webhook signature — request rejected")

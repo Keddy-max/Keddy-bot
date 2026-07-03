@@ -51,7 +51,7 @@ ERROR_REPLY: str = (
 )
 MEDIA_ERROR_REPLY: str = (
     "I couldn't process that attachment. "
-    "Please send a voice note or image under 5MB, or try again shortly."
+    "Please send a voice note or image (up to ~6MB), or try again shortly."
 )
 UNSUPPORTED_MEDIA_REPLY: str = (
     "I can process voice notes and images (JPEG, PNG, WebP). "

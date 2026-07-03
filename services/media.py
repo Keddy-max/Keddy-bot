@@ -16,7 +16,10 @@ from requests.auth import HTTPBasicAuth
 TWILIO_ACCOUNT_SID: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN")
 
-MAX_MEDIA_BYTES: int = 5 * 1024 * 1024  # WhatsApp/Twilio limit
+# WhatsApp/Twilio media size can be slightly larger than advertised depending
+# on encoding/metadata. Add a small buffer to avoid false "exceeds limit".
+MAX_MEDIA_BYTES: int = 6 * 1024 * 1024  # bytes
+
 DOWNLOAD_TIMEOUT_SECONDS: int = 30
 
 AUDIO_PREFIXES = ("audio/",)
@@ -110,8 +113,14 @@ def download_twilio_media(url: str, content_type: str) -> MediaAttachment:
         raise RuntimeError("Could not download media attachment") from error
 
     data = response.content
+
     if len(data) > MAX_MEDIA_BYTES:
         raise ValueError("Media file exceeds the 5MB size limit")
+
+    # Some clients report a smaller size than the decoded bytes due to
+    # transcoding/encoding differences. If Twilio returns exactly-at-limit
+    # payloads, allow a small grace via MAX_MEDIA_BYTES buffer above.
+
 
     if not data:
         raise ValueError("Media file is empty")

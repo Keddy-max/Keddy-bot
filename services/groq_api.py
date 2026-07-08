@@ -37,55 +37,117 @@ except Exception as error:
 MODEL_NAME: str = "llama-3.1-8b-instant"
 WHISPER_MODEL: str = "whisper-large-v3-turbo"
 VISION_MODEL: str = "llama-3.2-11b-vision-preview"
-MAX_TOKENS: int = 300
-TEMPERATURE: float = 0.2
+
+# Generation tuning tuned for more natural, conversational replies.
+MAX_TOKENS: int = 450
+TEMPERATURE: float = 0.35
+TOP_P: float = 0.9
+
+# Penalties: Groq supports these in many compatible APIs. We pass defensively.
+FREQUENCY_PENALTY: float = 0.2
+PRESENCE_PENALTY: float = 0.1
+
 MAX_HISTORY_LENGTH: int = 12
+MAX_RECENT_TURNS: int = 8
 SUPPORTED_MODES: List[str] = ["formal", "pidgin"]
 
-# Shared safety rules applied to all modes (Meta/WhatsApp compliance)
-SAFETY_RULES = """
-CONTENT SAFETY (MANDATORY):
-- Never provide instructions for violence, weapons, illegal activities, or self-harm.
-- Never generate sexually explicit content involving minors or non-consenting parties.
-- Never share personal data about real individuals you do not have permission to disclose.
-- Do not provide specific medical, legal, or financial advice — recommend qualified professionals instead.
-- If asked about your nature, clearly state you are an AI assistant powered by artificial intelligence.
-- Decline harmful, abusive, or policy-violating requests politely and redirect to helpful topics.
-"""
+# History/memory helpers
+MEMORY_MAX_CHARS: int = 800
 
-PERSONALITY_PROMPTS = {
-    "formal": f"""You are Keddy, a professional AI WhatsApp assistant created by Prince Ked Agbemenu.
+from services.prompting import get_system_prompt
 
-CREATOR RULE: If the user asks who created, built, or developed you, respond exactly:
-"I was created by Prince Ked Agbemenu."
+def _build_memory_from_history(
+    history: Optional[List[Dict[str, str]]],
+    mode: str,
+) -> str:
+    """Create a compact memory string from recent turns.
 
-ACCURACY: Provide factual, helpful information only. If uncertain, say:
-"I don't have reliable information on that. Please consult authoritative sources or a qualified professional."
+    We avoid extra LLM calls for memory (to keep latency low).
+    The goal is to remind the model about unresolved context and preferences
+    that likely appear in the last few turns.
 
-COMMUNICATION STYLE (Formal Mode):
-- Use clear, professional English with proper grammar
-- Be respectful, concise, and helpful (under 150 words)
-- Use emojis sparingly (one at most, when appropriate)
-- Structure longer answers with brief paragraphs or bullet points when helpful
+    Input history format is preserved as {role, content}.
+    """
+    if not history:
+        return ""
 
-{SAFETY_RULES}""",
+    # Take the last few turns, then heuristically summarize into a short note.
+    recent = history[-MAX_RECENT_TURNS:]
+    user_texts: List[str] = []
+    assistant_texts: List[str] = []
+    for item in recent:
+        role = (item.get("role") or "").lower()
+        content = (item.get("content") or "").strip()
+        if not content:
+            continue
+        if role == "user":
+            user_texts.append(content)
+        elif role == "assistant":
+            assistant_texts.append(content)
 
-    "pidgin": f"""You are Keddy, a friendly AI WhatsApp assistant created by Prince Ked Agbemenu.
+    if not user_texts and not assistant_texts:
+        return ""
 
-CREATOR RULE: If user ask who create or build you, respond exactly:
-"I was created by Prince Ked Agbemenu."
+    # Simple pattern-based “memory”:
+    # - last user intent/question (last user message)
+    # - last assistant outcome (last assistant message)
+    last_user = user_texts[-1] if user_texts else ""
+    last_assistant = assistant_texts[-1] if assistant_texts else ""
 
-ACCURACY: Give factual info only. If you no sure, say:
-"Abeg, I no too sure about that one. Try check reliable sources or ask a professional."
+    # Also include a small window of prior user messages for continuity.
+    prior_user = " | ".join(user_texts[-3:])
 
-COMMUNICATION STYLE (Pidgin Mode):
-- Speak natural Nigerian/West African Pidgin English
-- Be warm, friendly, and helpful (under 100 words)
-- Use common Pidgin naturally: "Abeg", "o", "abi", "wetin", "jare"
-- Light emoji use is fine
+    # Mode-specific style hint.
+    if mode.lower() == "pidgin":
+        note = (
+            f"Conversation memory (for continuity):\n"
+            f"- Last thing you asked: {last_user[:240]}\n"
+            f"- What I last said: {last_assistant[:240]}\n"
+            f"- Recent topics: {prior_user[:420]}"
+        )
+    else:
+        note = (
+            f"Conversation memory (for continuity):\n"
+            f"- Last thing you asked: {last_user[:240]}\n"
+            f"- What I last said: {last_assistant[:240]}\n"
+            f"- Recent topics: {prior_user[:420]}"
+        )
 
-{SAFETY_RULES}""",
-}
+    return note[:MEMORY_MAX_CHARS].strip()
+
+
+def _post_process_reply(text: str) -> str:
+    """Clean up reply text to feel less robotic.
+
+    - normalize excessive blank lines
+    - trim repeated leading/trailing whitespace
+    - remove duplicated consecutive lines
+    """
+    if not text:
+        return text
+
+    cleaned = text.replace("\r\n", "\n").strip()
+    # Collapse 3+ newlines to 2
+    while "\n\n\n" in cleaned:
+        cleaned = cleaned.replace("\n\n\n", "\n\n")
+
+    lines = cleaned.split("\n")
+    deduped: List[str] = []
+    prev = None
+    for ln in lines:
+        ln_stripped = ln.strip()
+        if not ln_stripped:
+            # keep one blank line between content blocks
+            if deduped and deduped[-1] != "":
+                deduped.append("")
+            prev = ln_stripped
+            continue
+        if prev is not None and ln_stripped == prev:
+            continue
+        deduped.append(ln)
+        prev = ln_stripped
+
+    return "\n".join(deduped).strip()
 
 
 def get_keddy_reply(
@@ -93,21 +155,7 @@ def get_keddy_reply(
     history: Optional[List[Dict[str, str]]] = None,
     mode: Optional[str] = None,
 ) -> str:
-    """
-    Generate an AI reply using the Groq API with conversation history.
-
-    Args:
-        user_message: The text received from the user. Must not be empty.
-        history: Optional list of previous chat messages.
-        mode: Language mode - "formal" (default) or "pidgin".
-
-    Returns:
-        The AI's response text as a string.
-
-    Raises:
-        ValueError: If user_message is empty or None.
-        RuntimeError: If the API call fails or returns invalid response.
-    """
+    """Generate an AI reply using the Groq API."""
     if not user_message or not isinstance(user_message, str):
         raise ValueError("user_message must be a non-empty string")
 
@@ -116,35 +164,58 @@ def get_keddy_reply(
         logging.warning(f"Invalid mode '{mode}', defaulting to 'formal'")
         normalized_mode = "formal"
 
-    system_content: str = PERSONALITY_PROMPTS.get(
-        normalized_mode, PERSONALITY_PROMPTS["formal"]
-    )
+    system_content: str = get_system_prompt(normalized_mode)
+
+    # Build a short memory note from the existing WhatsApp history.
+    memory_note: str = _build_memory_from_history(history=history, mode=normalized_mode)
 
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_content}]
+    if memory_note:
+        messages.append({"role": "system", "content": memory_note})
+
     if history:
         messages.extend(history[-MAX_HISTORY_LENGTH:])
+
     messages.append({"role": "user", "content": user_message})
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-        )
+        # Groq SDK compatibility: some clients accept penalties, some may not.
+        # We attempt with penalties, and fall back if the server rejects them.
+        try:
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages,
+                temperature=TEMPERATURE,
+                top_p=TOP_P,
+                frequency_penalty=FREQUENCY_PENALTY,
+                presence_penalty=PRESENCE_PENALTY,
+                max_tokens=MAX_TOKENS,
+            )
+        except TypeError:
+            # Older SDK/client: retry without penalty args.
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=messages,
+                temperature=TEMPERATURE,
+                top_p=TOP_P,
+                max_tokens=MAX_TOKENS,
+            )
+
 
         if not response.choices or not response.choices[0].message:
             raise RuntimeError("Invalid API response: no message content")
 
-        reply: str = response.choices[0].message.content.strip()
+        reply: str = response.choices[0].message.content or ""
+        reply = reply.strip()
         if not reply:
             raise RuntimeError("API returned empty response")
 
-        return reply
+        return _post_process_reply(reply)
 
     except Exception as error:
         logging.error(f"Groq API error: {type(error).__name__}: {error}")
         raise RuntimeError(f"Failed to generate reply: {error}") from error
+
 
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> str:
@@ -206,11 +277,10 @@ def get_keddy_image_reply(
     if normalized_mode not in SUPPORTED_MODES:
         normalized_mode = "formal"
 
-    system_content: str = PERSONALITY_PROMPTS.get(
-        normalized_mode, PERSONALITY_PROMPTS["formal"]
-    )
+    system_content: str = get_system_prompt(normalized_mode)
 
     prompt = user_message or "Please describe this image and offer helpful insights."
+
     b64_image = base64.b64encode(image_bytes).decode("utf-8")
     mime = content_type.split(";")[0].strip()
     data_url = f"data:{mime};base64,{b64_image}"

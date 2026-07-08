@@ -96,12 +96,12 @@ def get_help_message(base_url: str) -> str:
 def get_welcome_message(base_url: str) -> str:
     """Return first-contact welcome with consent disclosure."""
     return (
-        "Hello! I'm Keddy, your AI WhatsApp assistant, created by Prince Ked Agbemenu.\n\n"
-        "By continuing this conversation, you agree to our Privacy Policy and Terms:\n"
+        "Hi! I’m Keddy, your WhatsApp AI assistant—created by Prince Ked Agbemenu.\n\n"
+        "If you continue chatting, you agree to our Privacy Policy and Terms:\n"
         f"{base_url}/privacy\n"
         f"{base_url}/terms\n\n"
-        "Send HELP for commands. You can send text, voice notes, or images.\n"
-        "Reply STOP at any time to opt out."
+        "Send HELP if you need commands. You can share text, voice notes, or images.\n"
+        "Reply STOP anytime to opt out."
     )
 
 
@@ -144,3 +144,4 @@ def get_opted_out_reply() -> str:
         "You are currently unsubscribed from Keddy. "
         "Send START to re-subscribe and continue chatting."
     )
+

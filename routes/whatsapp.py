@@ -47,16 +47,17 @@ EMPTY_MESSAGE_REPLY: str = (
     "Send a text message, voice note, or image — or type HELP for commands."
 )
 ERROR_REPLY: str = (
-    "I apologize for the inconvenience. Please try again in a moment."
+    "Hmm — I ran into a problem. Please try again in a moment."
 )
 MEDIA_ERROR_REPLY: str = (
-    "I couldn't process that attachment. "
-    "Please send a voice note or image (up to ~6MB), or try again shortly."
+    "I couldn’t process that attachment. "
+    "Try sending a voice note or image (up to ~6MB), and I’ll handle it."
 )
 UNSUPPORTED_MEDIA_REPLY: str = (
-    "I can process voice notes and images (JPEG, PNG, WebP). "
-    "Please try sending one of those formats."
+    "I can read voice notes and images (JPEG, PNG, WebP). "
+    "Send one of those formats and we’re good."
 )
+
 
 TWILIO_AUTH_TOKEN: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN")
 BASE_URL: str = os.getenv("BASE_URL", "https://keddy-bot.onrender.com").rstrip("/")

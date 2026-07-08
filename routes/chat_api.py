@@ -37,6 +37,10 @@ def chat() -> Tuple[Any, int]:
         return jsonify({"error": "'message' must be a non-empty string"}), 400
 
     # Text-only web chat response.
-    reply = get_bot_response(message=message.strip(), history=None, mode="formal")
+    # Web chat keeps lightweight server-side context per client session.
+    # (No change to API shape.)
+    history = None
+    reply = get_bot_response(message=message.strip(), history=history, mode="formal")
+
     return jsonify({"reply": reply}), 200
 

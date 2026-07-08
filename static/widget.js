@@ -100,7 +100,13 @@
         const reply = await postChat(msg);
         addMessage(reply, 'bot');
       } catch (err) {
-        setError('Sorry — the chat service is unavailable right now. Please try again later.');
+        const msg = [
+          'Quick update: I’m having trouble reaching the chat service right now. Try again in a moment?',
+          'Hmm — something went wrong on my side. Please try again shortly.',
+          'I couldn’t reach the chat service right now. Try again in a bit?' 
+        ];
+        setError(msg[Math.floor(Math.random() * msg.length)]);
+
         console.error('[Keddy widget] /chat error:', err);
       } finally {
         setTyping(false);
@@ -183,8 +189,15 @@
     closeButton,
   };
 
-  // Initial system message
-  addMessage('Hi! How can I help you today?', 'bot');
+  // Initial message (varied greeting for a more natural feel)
+  const initialGreetings = [
+    'Hey! How can I help you today?',
+    'Hi there — what are we working on today?',
+    'Hello! What can I do for you?',
+    'Yo! What do you need help with?'
+  ];
+  addMessage(initialGreetings[Math.floor(Math.random() * initialGreetings.length)], 'bot');
+
   setTyping(false);
 
   // Wire events after globals are set

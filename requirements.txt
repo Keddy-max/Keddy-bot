@@ -4,4 +4,6 @@ groq
 python-dotenv
 twilio
 flask-limiter
+flask-cors
 requests
+

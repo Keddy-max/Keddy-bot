@@ -278,11 +278,15 @@ def whatsapp_webhook() -> Response:
         if direct_reply:
             ai_reply = direct_reply
         else:
-            ai_reply = get_keddy_reply(ai_input, history, mode)
+            # Shared bot logic (text-only) reused by web chat as well.
+            from services.bot_engine import get_bot_response
+
+            ai_reply = get_bot_response(message=ai_input, history=history, mode=mode)
 
         twiml_response.message(ai_reply)
 
         data["history"].append({"role": "user", "content": history_entry or ai_input})
+
         data["history"].append({"role": "assistant", "content": ai_reply})
         if len(data["history"]) > MAX_HISTORY_LENGTH:
             data["history"][:] = data["history"][-MAX_HISTORY_LENGTH:]

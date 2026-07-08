@@ -16,6 +16,8 @@ import os
 import logging
 from typing import Dict, Any, Tuple
 from flask import Flask
+from flask_cors import CORS
+
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
@@ -50,11 +52,19 @@ app.config.update(
 
 logger.info(f"Initializing Keddy bot in {FLASK_ENV} mode")
 
+# Enable CORS for the REST API (web widget calls POST /chat)
+CORS(app)
+
+
 try:
     from routes.whatsapp import whatsapp_bp, whatsapp_webhook
+    from routes.chat_api import chat_bp
+
     from routes.legal import legal_bp
 
     app.register_blueprint(whatsapp_bp)
+    app.register_blueprint(chat_bp)
+
     app.register_blueprint(legal_bp)
     limiter.limit("30 per minute")(whatsapp_webhook)
     logger.info("Routes registered successfully")

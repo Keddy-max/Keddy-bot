@@ -1,29 +1,16 @@
-# Keddy-bot Always-Active Online Server - Progress Tracker
+# Keddy-bot TODO
 
-## Plan Steps:
-- [x] 1. Create this TODO.md
-- [x] 2. Stage & commit local changes (ffab57a)
-- [x] 3. Push to GitHub (trigger Render redeploy)
-- [x] 4. **NEW: Make always active** - Setup UptimeRobot cron ping (below)
-- [ ] 5. Verify Render deployment (dashboard.render.com → Events/Logs)
-- [ ] 6. Test status endpoint
-- [x] 7. Task complete
+## Plan: Add embeddable website chat widget + /chat API without breaking WhatsApp
 
-## Always-Active Setup (Free):
-1. Go https://uptimerobot.com → Sign up (free).
-2. Add Monitor:
-   - Type: HTTP(s)
-   - URL: `https://your-render-url.onrender.com/status` 
-   - Monitor Interval: 5 minutes
-3. Save → Pings /status every 5 min → Keeps server awake ALWAYS (no sleep).
+- [x] Step 1: Refactor shared bot reply generation into reusable function `get_bot_response(message)` (and optional history/mode helpers) in a new module.
+- [x] Step 2: Add Flask route `POST /chat` that accepts `{ "message": "..." }` and returns `{ "reply": "..." }`.
+- [x] Step 3: Keep WhatsApp webhook logic in `routes/whatsapp.py` separate; update it to call the shared reply generation function.
+- [x] Step 4: Add CORS support for the API endpoint (and widget assets if needed).
+- [x] Step 5: Add static widget files `widget.js` and `widget.css` served from Flask.
+- [x] Step 6: Ensure widget is embeddable via only `<script src="https://YOUR-RENDER-APP.onrender.com/static/widget.js"></script>`.
+- [x] Step 7: Add deployment instructions for Render (env vars + static file serving).
 
-**Alternative**: Render paid Starter ($7/mo) via dashboard → Always-on guaranteed.
+- [ ] Step 8: Manual tests: verify WhatsApp webhook unchanged and `/chat` works from a browser.
 
-Server restarted & will stay active!
 
----
-
-## Language Mode Update
-- [ ] 8. Set default bot mode to **formal** (not pidgin).
-- [ ] 9. Ensure pidgin mode activates only when the user messages indicate pidgin.
 

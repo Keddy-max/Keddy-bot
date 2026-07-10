@@ -38,9 +38,38 @@ def chat() -> Tuple[Any, int]:
 
     # Text-only web chat response.
     # Web chat keeps lightweight server-side context per client session.
-    # (No change to API shape.)
-    history = None
-    reply = get_bot_response(message=message.strip(), history=history, mode="formal")
+    session_id = data.get("session_id") if isinstance(data, dict) else None
+    if not isinstance(session_id, str) or not session_id.strip():
+        # Stateless fallback (first message / unknown session)
+        session_id = "anonymous"
+
+    # In-memory per-session history (best-effort; resets on server restart).
+    # IMPORTANT: This is separate from WhatsApp in-memory history.
+    if not hasattr(chat, "session_data"):
+        chat.session_data = {}
+
+    session_data: Dict[str, Any] = chat.session_data  # type: ignore[attr-defined]
+    if session_id not in session_data:
+        session_data[session_id] = {"history": []}
+
+    history = session_data[session_id].get("history") or []
+    if not isinstance(history, list):
+        history = []
+
+    # Optional: allow widget to request language style.
+    mode = data.get("mode") if isinstance(data, dict) else None
+    reply = get_bot_response(message=message.strip(), history=history, mode=mode or "formal")
+
+    # Update stored history.
+    history.append({"role": "user", "content": message.strip()})
+    history.append({"role": "assistant", "content": reply})
+
+    # Keep last turns reasonable for cost/latency.
+    if len(history) > 24:
+        history[:] = history[-24:]
+
+    session_data[session_id]["history"] = history
 
     return jsonify({"reply": reply}), 200
+
 

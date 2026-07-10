@@ -40,8 +40,9 @@ VISION_MODEL: str = "llama-3.2-11b-vision-preview"
 
 # Generation tuning tuned for more natural, conversational replies.
 MAX_TOKENS: int = 450
-TEMPERATURE: float = 0.35
-TOP_P: float = 0.9
+TEMPERATURE: float = 0.22
+TOP_P: float = 0.88
+
 
 # Penalties: Groq supports these in many compatible APIs. We pass defensively.
 FREQUENCY_PENALTY: float = 0.2
@@ -181,36 +182,50 @@ def get_keddy_reply(
     try:
         # Groq SDK compatibility: some clients accept penalties, some may not.
         # We attempt with penalties, and fall back if the server rejects them.
-        try:
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                temperature=TEMPERATURE,
-                top_p=TOP_P,
-                frequency_penalty=FREQUENCY_PENALTY,
-                presence_penalty=PRESENCE_PENALTY,
-                max_tokens=MAX_TOKENS,
+        def _create_call(msgs: List[Dict[str, str]], temp: float) -> str:
+            try:
+                resp = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=msgs,
+                    temperature=temp,
+                    top_p=TOP_P,
+                    frequency_penalty=FREQUENCY_PENALTY,
+                    presence_penalty=PRESENCE_PENALTY,
+                    max_tokens=MAX_TOKENS,
+                )
+            except TypeError:
+                resp = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=msgs,
+                    temperature=temp,
+                    top_p=TOP_P,
+                    max_tokens=MAX_TOKENS,
+                )
+
+            if not resp.choices or not resp.choices[0].message:
+                raise RuntimeError("Invalid API response: no message content")
+
+            out = (resp.choices[0].message.content or "").strip()
+            if not out:
+                raise RuntimeError("API returned empty response")
+            return out
+
+        # First attempt
+        reply_raw = _create_call(messages=messages, temp=TEMPERATURE).strip()
+
+        # One-shot accuracy retry if the reply seems too short or looks generic.
+        needs_retry = len(reply_raw) < 10 or reply_raw.lower() in {"ok", "okay", "sure"}
+        if needs_retry:
+            retry_system = (
+                "You must produce a helpful, specific answer. "
+                "If the user request is ambiguous, ask 1 short clarifying question. "
+                "Do not guess facts, numbers, or specific details."
             )
-        except TypeError:
-            # Older SDK/client: retry without penalty args.
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                temperature=TEMPERATURE,
-                top_p=TOP_P,
-                max_tokens=MAX_TOKENS,
-            )
+            retry_messages = [{"role": "system", "content": retry_system}] + messages
+            reply_raw = _create_call(messages=retry_messages, temp=0.12).strip()
 
+        return _post_process_reply(reply_raw)
 
-        if not response.choices or not response.choices[0].message:
-            raise RuntimeError("Invalid API response: no message content")
-
-        reply: str = response.choices[0].message.content or ""
-        reply = reply.strip()
-        if not reply:
-            raise RuntimeError("API returned empty response")
-
-        return _post_process_reply(reply)
 
     except Exception as error:
         logging.error(f"Groq API error: {type(error).__name__}: {error}")

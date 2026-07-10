@@ -65,7 +65,12 @@
     const resp = await fetch(CHAT_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        session_id: window.localStorage.getItem('keddy-session-id') || null,
+        mode: window.localStorage.getItem('keddy-mode') || 'formal',
+      }),
+
     });
 
     if (!resp.ok) {
@@ -121,9 +126,28 @@
     });
   }
 
+  // Ensure we have a stable session id for conversation continuity
+  (function ensureSessionId() {
+    try {
+      let sid = window.localStorage.getItem('keddy-session-id');
+      if (!sid) {
+        sid = `web_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+        window.localStorage.setItem('keddy-session-id', sid);
+      }
+
+      // Persist a simple mode preference if user ever changes it.
+      if (!window.localStorage.getItem('keddy-mode')) {
+        window.localStorage.setItem('keddy-mode', 'formal');
+      }
+    } catch (_) {
+      // localStorage might be blocked; fall back to anonymous mode.
+    }
+  })();
+
   ensureCSS();
 
   // Create widget DOM
+
   const widgetRoot = createEl('div', 'keddy-widget');
   widgetRoot.setAttribute('id', 'keddy-widget-root');
 

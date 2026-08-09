@@ -290,9 +290,11 @@ def analyze_image(
     if not prompt:
         prompt = NO_CAPTION_PROMPT
 
-    # System prompt from the shared prompting module (identity + mode).
-    from services.prompting import get_system_prompt
-    system_prompt = get_system_prompt(mode or "formal")
+    # System prompt from the shared prompting module (concise, vision-focused).
+    # Using the full Keddy-Bot identity prompt here can overflow the vision
+    # model's smaller context window when combined with a large base64 image.
+    from services.prompting import get_vision_system_prompt
+    system_prompt = get_vision_system_prompt(mode or "formal")
 
     context_note = _build_context_note(history)
 
@@ -320,4 +322,3 @@ def analyze_image(
 def analyzeImage(image_bytes: bytes, user_prompt: str = "", **kwargs):
     """Backwards-compatible alias for analyze_image (camelCase)."""
     return analyze_image(image_bytes, user_prompt=user_prompt, **kwargs)
-

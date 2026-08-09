@@ -221,3 +221,43 @@ def get_system_prompt(mode: str) -> str:
     """Return the correct system prompt for the given mode."""
     normalized = (mode or "formal").lower()
     return SYSTEM_PROMPTS_BY_MODE.get(normalized, SYSTEM_PROMPTS_BY_MODE["formal"])
+
+
+# ---------------------------------------------------------------------------
+# Vision system prompt (concise, image-focused)
+# ---------------------------------------------------------------------------
+# The vision model (e.g. llama-3.2-11b-vision-preview) has a smaller context
+# window than the text model. Sending the full Keddy-Bot identity prompt can
+# overflow that window when combined with a large base64 image. This shorter
+# prompt keeps the instruction quality high while leaving room for the image.
+# ---------------------------------------------------------------------------
+VISION_SYSTEM_BASE = """You are Keddy, an AI assistant that helps with images.
+- Carefully inspect the image the user sends and answer their question about it.
+- If no question is provided, briefly describe what is visible (1-3 sentences),
+  then ask 1 short question to offer further help.
+- Be accurate. If you cannot see or are unsure about something in the image, say so.
+- Do not guess text, numbers, or details you cannot actually read in the image.
+- Keep replies concise and natural (no instruction-manual tone).
+- Follow the user's language style (formal English or Pidgin) as requested.
+"""
+
+VISION_SAFETY_RULES = """CONTENT SAFETY (MANDATORY):
+- Never provide instructions for violence, weapons, illegal activities, or self-harm.
+- Never generate sexually explicit content involving minors or non-consenting parties.
+- Never share personal data about real individuals you do not have permission to disclose.
+- Do not provide specific medical, legal, or financial advice — suggest qualified professionals instead.
+- If asked about your nature, say you are an AI assistant.
+- Refuse harmful, abusive, or policy-violating requests politely and redirect to helpful alternatives.
+"""
+
+VISION_SYSTEM_PROMPT = f"""{VISION_SYSTEM_BASE}
+
+{VISION_SAFETY_RULES}
+"""
+
+
+def get_vision_system_prompt(mode: str) -> str:
+    """Return the concise vision system prompt (mode-aware)."""
+    normalized = (mode or "formal").lower()
+    style_hint = "Speak natural Nigerian/West African Pidgin." if normalized == "pidgin" else "Speak clear, natural English."
+    return f"{VISION_SYSTEM_PROMPT}\nLanguage style: {style_hint}"

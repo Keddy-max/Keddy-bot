@@ -2,6 +2,12 @@
 Flask Blueprint for handling Twilio WhatsApp webhook requests.
 
 Supports text messages, voice notes, and images via Twilio media attachments.
+
+Vision flow (image messages):
+    WhatsApp user -> webhook -> parse/download media -> vision service
+    -> AI response -> reply to WhatsApp.
+
+Text and voice-note flows are preserved unchanged.
 """
 
 import os
@@ -15,8 +21,10 @@ from services.groq_api import get_keddy_reply, get_keddy_image_reply, transcribe
 from services.media import (
     parse_incoming_message,
     IncomingMessage,
+    MediaAttachment,
     audio_filename,
 )
+from services.vision import VisionError, analyze_image
 from utils.helpers import sanitize_input
 from utils.compliance import (
     mask_phone,
@@ -52,6 +60,10 @@ ERROR_REPLY: str = (
 MEDIA_ERROR_REPLY: str = (
     "I couldn’t process that attachment. "
     "Try sending a voice note or image (up to ~6MB), and I’ll handle it."
+)
+IMAGE_ERROR_REPLY: str = (
+    "Sorry, I couldn't process that image right now. "
+    "Please try sending it again."
 )
 UNSUPPORTED_MEDIA_REPLY: str = (
     "I can read voice notes and images (JPEG, PNG, WebP). "
@@ -111,6 +123,7 @@ def _handle_compliance_command(
     if is_keyword_command(message, STOP_KEYWORDS):
         opt_out(phone)
         data["history"] = []
+        data["last_image_context"] = ""
         return get_stop_message()
 
     if is_keyword_command(message, START_KEYWORDS):
@@ -123,6 +136,7 @@ def _handle_compliance_command(
 
     if is_keyword_command(message, DELETE_KEYWORDS):
         data["history"] = []
+        data["last_image_context"] = ""
         return get_delete_message()
 
     if is_keyword_command(message, PRIVACY_KEYWORDS):
@@ -133,10 +147,13 @@ def _handle_compliance_command(
 
 def _history_label_for_media(incoming: IncomingMessage) -> str:
     """Build a history-friendly label for media messages."""
-    if incoming.media and incoming.media.is_audio:
-        prefix = "[Voice note]"
-    elif incoming.media and incoming.media.is_image:
-        prefix = "[Image]"
+    image_count = sum(1 for m in incoming.media if m.is_image)
+    audio_count = sum(1 for m in incoming.media if m.is_audio)
+
+    if image_count:
+        prefix = f"[{image_count} Image{'s' if image_count > 1 else ''}]"
+    elif audio_count:
+        prefix = f"[{audio_count} Voice note{'s' if audio_count > 1 else ''}]"
     else:
         return incoming.text
 
@@ -148,15 +165,15 @@ def _history_label_for_media(incoming: IncomingMessage) -> str:
 def _resolve_user_input(
     incoming: IncomingMessage,
     mode: str,
-    history: List[Dict[str, str]],
 ) -> tuple[str, str, Optional[str]]:
     """
     Convert incoming message (text/media) into AI input.
 
     Returns:
         Tuple of (ai_input, history_entry, ai_reply_or_none).
-        If ai_reply is set, it was generated directly (e.g. vision) and caller
-        should use it instead of calling get_keddy_reply.
+        - Audio is transcribed and returned as text input (ai_reply is None).
+        - Images are returned with ai_reply=None so the caller runs vision.
+        - Pure text returns text as ai_input.
     """
     text = sanitize_input(incoming.text) if incoming.text else ""
 
@@ -164,29 +181,69 @@ def _resolve_user_input(
         return text, text, None
 
     media = incoming.media
+    images = [m for m in media if m.is_image]
+    audios = [m for m in media if m.is_audio]
 
-    if media.is_audio:
-        transcript = transcribe_audio(media.data, audio_filename(media.content_type))
+    # Audio only (no images): transcribe and treat as text.
+    if audios and not images:
+        transcripts: List[str] = []
+        for m in audios:
+            transcript = transcribe_audio(m.data, audio_filename(m.content_type))
+            transcripts.append(transcript)
+        joined = " | ".join(transcripts)
         if text:
-            ai_input = f"{text}\n\n[Voice note]: {transcript}"
-            history_entry = f"[Voice note] {text}: {transcript}"
+            ai_input = f"{text}\n\n[Voice note]: {joined}"
+            history_entry = f"[Voice note] {text}: {joined}"
         else:
-            ai_input = transcript
-            history_entry = f"[Voice note]: {transcript}"
+            ai_input = joined
+            history_entry = f"[Voice note]: {joined}"
         return ai_input, history_entry, None
 
-    if media.is_image:
-        ai_reply = get_keddy_image_reply(
-            media.data,
-            media.content_type,
-            text,
+    # Any images present: handled by the caller via the vision service.
+    if images:
+        history_entry = _history_label_for_media(incoming)
+        return text or "[Image sent]", history_entry, None
+
+    raise ValueError(f"Unsupported media type: {[m.content_type for m in media]}")
+
+
+def _analyze_images(
+    images: List[MediaAttachment],
+    user_text: str,
+    history: List[Dict[str, str]],
+    mode: str,
+) -> str:
+    """Analyze one or more images via the vision service.
+
+    The actual image bytes and the user's text are both sent to the model.
+    A short context note is included so follow-up questions about a previously
+    analyzed image keep working.
+    """
+    if len(images) == 1:
+        return analyze_image(
+            image_bytes=images[0].data,
+            content_type=images[0].content_type,
+            user_prompt=user_text,
             history=history,
             mode=mode,
         )
-        history_entry = _history_label_for_media(incoming)
-        return text or "[Image sent]", history_entry, ai_reply
 
-    raise ValueError(f"Unsupported media type: {media.content_type}")
+    # Multiple images: analyze each and combine concise results.
+    combined: List[str] = []
+    for idx, img in enumerate(images, start=1):
+        prompt = user_text if user_text else f"Describe image {idx} briefly."
+        if user_text:
+            prompt = f"About image {idx} of {len(images)}: {user_text}"
+        combined.append(
+            analyze_image(
+                image_bytes=img.data,
+                content_type=img.content_type,
+                user_prompt=prompt,
+                history=history,
+                mode=mode,
+            )
+        )
+    return "\n\n".join(combined)
 
 
 @whatsapp_bp.route("/whatsapp", methods=["POST"])
@@ -205,7 +262,10 @@ def whatsapp_webhook() -> Response:
 
         media_type = "none"
         if incoming.media:
-            media_type = "audio" if incoming.media.is_audio else "image"
+            if any(m.is_image for m in incoming.media):
+                media_type = "image"
+            elif any(m.is_audio for m in incoming.media):
+                media_type = "audio"
         logging.info(f"Incoming {media_type} message from {user_id}")
 
         if phone_number not in session_data:
@@ -213,6 +273,7 @@ def whatsapp_webhook() -> Response:
                 "history": [],
                 "mode": DEFAULT_MODE,
                 "welcomed": False,
+                "last_image_context": "",
             }
 
         data: Dict[str, Any] = session_data[phone_number]
@@ -250,33 +311,46 @@ def whatsapp_webhook() -> Response:
 
         try:
             ai_input, history_entry, direct_reply = _resolve_user_input(
-                incoming, mode, history
+                incoming, mode
             )
         except ValueError as error:
             logging.warning(f"Unsupported media: {error}")
             twiml_response.message(UNSUPPORTED_MEDIA_REPLY)
             return Response(str(twiml_response), mimetype="application/xml")
-        except RuntimeError as error:
+        except (RuntimeError, VisionError) as error:
             logging.error(f"Media processing failed: {error}")
-            twiml_response.message(MEDIA_ERROR_REPLY)
-            return Response(str(twiml_response), mimetype="application/xml")
-
-        if not ai_input and not direct_reply:
-            twiml_response.message(EMPTY_MESSAGE_REPLY)
+            twiml_response.message(IMAGE_ERROR_REPLY)
             return Response(str(twiml_response), mimetype="application/xml")
 
         if ai_input and is_blocked_content(ai_input):
             twiml_response.message(BLOCKED_CONTENT_REPLY)
             return Response(str(twiml_response), mimetype="application/xml")
 
-        if ai_input and not direct_reply:
-            detected_mode = _detect_mode(ai_input, mode)
-            if detected_mode != mode:
-                data["mode"] = detected_mode
-                mode = detected_mode
-                logging.info(f"Mode switched to {detected_mode} for {user_id}")
+        # Determine whether this message contains images to analyze.
+        images = [m for m in incoming.media if m.is_image]
 
-        if direct_reply:
+        if images:
+            # Vision flow: include stored image context for follow-up questions.
+            context_history = list(history)
+            if data.get("last_image_context"):
+                context_history.append(
+                    {"role": "assistant", "content": data["last_image_context"]}
+                )
+            try:
+                ai_reply = _analyze_images(
+                    images=images,
+                    user_text=ai_input or "",
+                    history=context_history,
+                    mode=mode,
+                )
+            except (VisionError, RuntimeError, ValueError) as error:
+                logging.error(f"Vision processing failed for {user_id}: {error}")
+                twiml_response.message(IMAGE_ERROR_REPLY)
+                return Response(str(twiml_response), mimetype="application/xml")
+
+            # Remember a short summary of the image description for follow-ups.
+            data["last_image_context"] = ai_reply[:300]
+        elif direct_reply:
             ai_reply = direct_reply
         else:
             # Shared bot logic (text-only) reused by web chat as well.
@@ -287,7 +361,6 @@ def whatsapp_webhook() -> Response:
         twiml_response.message(ai_reply)
 
         data["history"].append({"role": "user", "content": history_entry or ai_input})
-
         data["history"].append({"role": "assistant", "content": ai_reply})
         if len(data["history"]) > MAX_HISTORY_LENGTH:
             data["history"][:] = data["history"][-MAX_HISTORY_LENGTH:]

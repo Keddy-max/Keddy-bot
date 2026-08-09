@@ -16,6 +16,66 @@ A professional WhatsApp AI assistant powered by Groq (Llama 3.1), built for Meta
 - Privacy-conscious logging (hashed user identifiers)
 - Rate limiting to prevent abuse
 
+## Image Understanding (Vision)
+
+Keddy can receive images from WhatsApp and send them to a vision-capable AI model for understanding. It supports:
+
+- Images with captions or questions
+- Images without captions (brief description + offer to help)
+- OCR / text extraction from images
+- Screenshot analysis
+- Document/photo interpretation
+- Charts and diagram explanation
+- Multiple images in one message
+- Follow-up questions about a previously analyzed image
+
+### How the image flow works
+
+```
+WhatsApp user
+   ↓ sends image (+ optional caption)
+Twilio webhook (/whatsapp)
+   ↓ parse_incoming_message(): downloads the actual image bytes
+services/media.py (MIME/size validation, multi-image support)
+   ↓
+services/vision.py  analyze_image()  (reusable vision service)
+   ├─ Groq vision model (default)  OR  a generic VISION_API_URL provider
+   ├─ sends BOTH the image bytes and the user's text
+   └─ includes conversation history for follow-up context
+   ↓
+services/groq_api.py  get_keddy_image_reply()  (backward-compatible wrapper)
+routes/whatsapp.py
+   ↓
+AI response sent back to WhatsApp via TwiML
+```
+
+The actual image (not just a filename/URL) is sent to the model. Media is
+processed in memory — images are never stored permanently.
+
+### Vision configuration (env vars)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VISION_MODEL` | Vision model name | `llama-3.2-11b-vision-preview` |
+| `VISION_API_KEY` | Optional override; falls back to `GROQ_API_KEY` | _unset_ |
+| `VISION_API_URL` | Optional generic OpenAI-style vision endpoint | _unset_ |
+| `VISION_TIMEOUT_SECONDS` | Request timeout | `60` |
+| `VISION_MAX_TOKENS` | Max response tokens | `600` |
+| `VISION_TEMPERATURE` | Sampling temperature | `0.22` |
+
+### Supported image formats
+
+`JPEG/JPG`, `PNG`, `WEBP` (plus `GIF`/`AVIF` if your provider supports them).
+Unsupported formats return a clear friendly message.
+
+### Vision model limitations
+
+- The default Groq vision model (`llama-3.2-11b-vision-preview`) is a preview
+  model; accuracy on dense text, small details, or complex charts may vary.
+- Images are limited to ~6MB (Twilio/Twilio media limit).
+- Follow-up questions work best within the same conversation session; the
+  stored "last image context" is short (~300 chars) and cleared on `DELETE`/`STOP`.
+
 ## Quick Setup
 
 1. **Install dependencies:**
@@ -23,12 +83,17 @@ A professional WhatsApp AI assistant powered by Groq (Llama 3.1), built for Meta
    pip install -r requirements.txt
    ```
 
-2. **Configure environment** (create a `.env` file):
+2. **Configure environment** (copy `.env.example` to `.env` and fill in your values):
    ```
    TWILIO_ACCOUNT_SID=your_sid
    TWILIO_AUTH_TOKEN=your_token
    GROQ_API_KEY=your_groq_key
    BASE_URL=https://your-deployed-url.com
+
+   # Optional vision overrides (Groq vision is used by default)
+   VISION_MODEL=llama-3.2-11b-vision-preview
+   VISION_API_KEY=
+   VISION_API_URL=
    ```
 
 3. **Configure Twilio WhatsApp:**
@@ -112,7 +177,9 @@ Keddy-bot/
 │   ├── whatsapp.py         # Twilio webhook + compliance
 │   └── legal.py            # Privacy & terms pages
 ├── services/
-│   └── groq_api.py         # AI responses + safety prompts
+│   ├── groq_api.py         # AI responses + safety prompts
+│   ├── vision.py           # Reusable vision service (image understanding)
+│   └── media.py            # Twilio media download + validation
 ├── utils/
 │   ├── helpers.py          # Input sanitization
 │   └── compliance.py       # STOP/HELP, opt-out, content filters

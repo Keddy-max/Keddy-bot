@@ -1,10 +1,11 @@
-# Keddy-bot TODO (accuracy improvements)
+# Keddy-bot TODO (image understanding / vision upgrade)
 
-## Optimal Keeddy-Bot system prompt integration
-- [x] 1) Add server-side web conversation history to `/chat` (session_id + store recent turns)
-- [x] 2) Update widget to persist a `session_id` in `localStorage` and send it with requests
-- [x] 3) Strengthen system prompt instructions for accuracy (clarifying questions, avoid guessing)
-- [x] 4) Improve memory formatting for consistency
-- [x] 5) Tune Groq generation parameters for lower variance (temperature/top_p) and add a one-shot retry self-check
-- [x] 6) Run `python -m py_compile` sanity check
-- [ ] 7) Manual test widget continuity + ambiguous prompts behavior
+## Vision support enhancement
+- [x] 1) Create reusable `services/vision.py` with configurable `analyze_image()`
+- [x] 2) Harden `services/media.py`: multi-image download + MIME/size validation
+- [x] 3) Improve `routes/whatsapp.py`: image routing, follow-up context, friendly errors
+- [x] 4) Refactor `services/groq_api.py` to delegate to vision service (keep backward compat)
+- [x] 5) Add `.env.example` with vision config docs
+- [x] 6) Update README with vision feature, env vars, limitations
+- [x] 7) Run `python -m py_compile` sanity check on all changed files
+- [ ] 8) Manual test through WhatsApp (requires live Twilio + Groq keys)

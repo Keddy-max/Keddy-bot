@@ -273,7 +273,10 @@ def get_keddy_image_reply(
     mode: Optional[str] = None,
 ) -> str:
     """
-    Analyze an image and generate a reply using Groq vision.
+    Analyze an image and generate a reply using the vision service.
+
+    This function is kept for backward compatibility; it delegates to the
+    reusable, configurable vision service in services/vision.py.
 
     Args:
         image_bytes: Raw image bytes from Twilio.
@@ -285,49 +288,17 @@ def get_keddy_image_reply(
     Returns:
         AI response describing or answering about the image.
     """
-    if not image_bytes:
-        raise ValueError("image_bytes must not be empty")
+    from services.vision import analyze_image
 
     normalized_mode: str = (mode or "formal").lower()
     if normalized_mode not in SUPPORTED_MODES:
         normalized_mode = "formal"
 
-    system_content: str = get_system_prompt(normalized_mode)
-
-    prompt = user_message or "Please describe this image and offer helpful insights."
-
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
-    mime = content_type.split(";")[0].strip()
-    data_url = f"data:{mime};base64,{b64_image}"
-
-    user_content: List[Dict[str, Union[str, Dict[str, str]]]] = [
-        {"type": "text", "text": prompt},
-        {"type": "image_url", "image_url": {"url": data_url}},
-    ]
-
-    messages: List[Dict[str, object]] = [{"role": "system", "content": system_content}]
-    if history:
-        messages.extend(history[-MAX_HISTORY_LENGTH:])
-    messages.append({"role": "user", "content": user_content})
-
-    try:
-        response = client.chat.completions.create(
-            model=VISION_MODEL,
-            messages=messages,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-        )
-
-        if not response.choices or not response.choices[0].message:
-            raise RuntimeError("Invalid vision API response")
-
-        reply: str = response.choices[0].message.content.strip()
-        if not reply:
-            raise RuntimeError("Vision API returned empty response")
-
-        return reply
-
-    except Exception as error:
-        logging.error(f"Groq vision error: {type(error).__name__}: {error}")
-        raise RuntimeError(f"Failed to analyze image: {error}") from error
+    return analyze_image(
+        image_bytes=image_bytes,
+        content_type=content_type,
+        user_prompt=user_message or "",
+        history=history,
+        mode=normalized_mode,
+    )
 

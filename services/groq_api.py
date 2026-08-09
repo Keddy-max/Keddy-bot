@@ -57,6 +57,7 @@ MEMORY_MAX_CHARS: int = 800
 
 from services.prompting import get_system_prompt
 
+
 def _build_memory_from_history(
     history: Optional[List[Dict[str, str]]],
     mode: str,
@@ -89,7 +90,7 @@ def _build_memory_from_history(
     if not user_texts and not assistant_texts:
         return ""
 
-    # Simple pattern-based “memory”:
+    # Simple pattern-based "memory":
     # - last user intent/question (last user message)
     # - last assistant outcome (last assistant message)
     last_user = user_texts[-1] if user_texts else ""
@@ -211,7 +212,7 @@ def get_keddy_reply(
             return out
 
         # First attempt
-        reply_raw = _create_call(messages=messages, temp=TEMPERATURE).strip()
+        reply_raw = _create_call(msgs=messages, temp=TEMPERATURE).strip()
 
         # One-shot accuracy retry if the reply seems too short or looks generic.
         needs_retry = len(reply_raw) < 10 or reply_raw.lower() in {"ok", "okay", "sure"}
@@ -222,15 +223,13 @@ def get_keddy_reply(
                 "Do not guess facts, numbers, or specific details."
             )
             retry_messages = [{"role": "system", "content": retry_system}] + messages
-            reply_raw = _create_call(messages=retry_messages, temp=0.12).strip()
+            reply_raw = _create_call(msgs=retry_messages, temp=0.12).strip()
 
         return _post_process_reply(reply_raw)
-
 
     except Exception as error:
         logging.error(f"Groq API error: {type(error).__name__}: {error}")
         raise RuntimeError(f"Failed to generate reply: {error}") from error
-
 
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "voice.ogg") -> str:
@@ -301,4 +300,3 @@ def get_keddy_image_reply(
         history=history,
         mode=normalized_mode,
     )
-

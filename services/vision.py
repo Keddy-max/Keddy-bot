@@ -40,6 +40,11 @@ VISION_MODEL: str = os.getenv("VISION_MODEL", DEFAULT_VISION_MODEL)
 VISION_API_URL: Optional[str] = os.getenv("VISION_API_URL") or None
 VISION_API_KEY: Optional[str] = os.getenv("VISION_API_KEY") or os.getenv("GROQ_API_KEY")
 
+# Correct Groq base URL. The SDK appends /chat/completions to this.
+# If VISION_API_URL is set to a wrong host (e.g. console.groq.com) or a
+# partial path, requests fail with "Unknown request URL" — so we normalize it.
+GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+
 VISION_TIMEOUT_SECONDS: int = int(os.getenv("VISION_TIMEOUT_SECONDS", "60"))
 VISION_MAX_TOKENS: int = int(os.getenv("VISION_MAX_TOKENS", "600"))
 VISION_TEMPERATURE: float = float(os.getenv("VISION_TEMPERATURE", "0.22"))
@@ -84,6 +89,37 @@ def is_supported_image(content_type: str) -> bool:
 def normalize_mime(content_type: str) -> str:
     """Return the base MIME type (strip params) lowercased."""
     return (content_type or "").split(";")[0].strip().lower()
+
+
+def normalize_vision_url(url: Optional[str]) -> Optional[str]:
+    """Normalize a user-supplied VISION_API_URL to a valid chat endpoint.
+
+    The Groq SDK appends ``/chat/completions`` to its base URL. If a user
+    sets VISION_API_URL to a bare host (e.g. ``https://console.groq.com``) or
+    to a base like ``https://api.groq.com/openai/v1``, requests will fail with
+    "Unknown request URL" because the path is wrong. This helper corrects it
+    to the full Groq chat-completions URL, or returns None if it's not a
+    Groq URL (so the caller can fall back to the SDK).
+    """
+    if not url:
+        return None
+    stripped = url.strip().rstrip("/")
+    if not stripped:
+        return None
+
+    # Correct the most common mistakes: console.groq.com (invalid API host)
+    # or a partial base URL that's missing the full chat path.
+    if "console.groq.com" in stripped:
+        return GROQ_BASE_URL + "/chat/completions"
+    if "api.groq.com" in stripped and not stripped.endswith("/chat/completions"):
+        return GROQ_BASE_URL + "/chat/completions"
+
+    # If it's already a full chat/completions URL, use as-is.
+    if stripped.endswith("/chat/completions"):
+        return stripped
+
+    # Unknown host — return as-is and let the request fail with a clear log.
+    return stripped
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +169,10 @@ def _groq_analyze(
     if not VISION_API_KEY:
         raise VisionError("Missing VISION_API_KEY / GROQ_API_KEY")
 
+    # Use the default Groq client (no base_url override) — this matches the
+    # working text path in groq_api.py. Overriding the base_url or pointing
+    # VISION_API_URL at a wrong Groq host (e.g. console.groq.com) produces
+    # "Unknown request URL: GET /openai/v1/chat/completions" errors.
     client = Groq(api_key=VISION_API_KEY)
 
     b64_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -180,14 +220,20 @@ def _generic_analyze(
     context_note: str,
     history: Optional[List[Dict[str, str]]],
     system_prompt: str,
+    url: Optional[str] = None,
 ) -> str:
     """Send the image + text prompt to a generic OpenAI-style vision endpoint.
 
     Used only when VISION_API_URL is set. The request body mirrors the OpenAI
     chat-completions multimodal format so it works with many compatible
     providers (OpenAI, OpenRouter, etc.).
+
+    Args:
+        url: The normalized full chat/completions URL. Defaults to the
+            module-level VISION_API_URL (normalized at call time).
     """
-    if not VISION_API_URL:
+    effective_url = normalize_vision_url(url or VISION_API_URL)
+    if not effective_url:
         raise VisionError("VISION_API_URL is not configured")
 
     headers: Dict[str, str] = {"Content-Type": "application/json"}
@@ -220,7 +266,7 @@ def _generic_analyze(
 
     try:
         resp = requests.post(
-            VISION_API_URL,
+            effective_url,
             headers=headers,
             json=payload,
             timeout=VISION_TIMEOUT_SECONDS,
